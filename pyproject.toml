@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scattering-geometry-tools"
-version = "0.1.1"
+version = "0.1.2"
 description = "Tools for calculations of geometries in scattering experiments. "
 readme = "README.md"
 authors = [{name = "Shintaro Nakagawa", email = "shntrnkgw@gmail.com"}]
@@ -16,7 +16,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.23", 
-    "scipy>=1.90"
+    "scipy>=1.9.0"
 ]
 
 [project.urls]
