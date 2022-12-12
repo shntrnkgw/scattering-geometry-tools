@@ -9,6 +9,11 @@ setup_args = dict(
             'sgt._cpolarize',
             ['src/sgt/_cpolarize.c'],
             include_dirs = [get_include()]
+        ), 
+        Extension(
+            'sgt._crefine',
+            ['src/sgt/_crefine.c'],
+            include_dirs = [get_include()]
         )
     ]
 )

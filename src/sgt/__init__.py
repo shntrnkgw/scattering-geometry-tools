@@ -6,7 +6,7 @@
 from typing import List, IO, Tuple
 import numpy as np
 import json
-from sgt import core, pilatus, _cpolarize
+from sgt import core, _cpolarize
 
 __version__ = "0.1.0"
 
@@ -254,6 +254,9 @@ class geometry(object):
             return False
         
         return True
+
+    def get_qabs(self) -> np.ndarray: 
+        return np.sqrt(self.qx*self.qx + self.qy*self.qy + self.qz*self.qz)
 
     @property
     def R(self) -> np.ndarray: return self._R
