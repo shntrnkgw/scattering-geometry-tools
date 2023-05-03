@@ -8,7 +8,7 @@ import numpy as np
 import json
 from sgt import core, _cpolarize
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 class geometry:
     """Interface class for scattering geometry manipulation. 
