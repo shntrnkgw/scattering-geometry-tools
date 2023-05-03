@@ -39,7 +39,7 @@ def score_by_rings(
 
     # return 1.0/ret
     if verbose:
-        print(-ret)
+        print("Score:", -ret, "Params:", geom.specs)
 
     return -ret
 

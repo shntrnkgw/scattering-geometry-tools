@@ -10,7 +10,7 @@ from sgt import core, _cpolarize
 
 __version__ = "0.1.2"
 
-class geometry(object):
+class geometry:
     """Interface class for scattering geometry manipulation. 
 
     Example:
