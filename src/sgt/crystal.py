@@ -40,9 +40,9 @@ def make_reciprocal_primitive_vectors(
     avec: np.ndarray, bvec: np.ndarray, cvec: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
-    pref: float = 2.0*np.pi*np.dot(avec, np.outer(bvec, cvec))
+    pref: float = 2.0*np.pi/np.dot(avec, np.cross(bvec, cvec))
 
-    return pref*np.outer(bvec, cvec), pref*np.outer(cvec, avec), pref*np.outer(avec, bvec)
+    return pref*np.cross(bvec, cvec), pref*np.cross(cvec, avec), pref*np.cross(avec, bvec)
 
 def make_reciprocal_lattice_vector(
     h: int, k: int, l: int, 
