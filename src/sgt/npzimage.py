@@ -4,21 +4,28 @@
 The code was initially in `snpl` package and has been included
 in this package for convenience. 
 
+Note:
+    As of version 1.0.0, the use of NpzImage format to save the file is discouraged, 
+    as it seems to be causing problems (and it is can be unsafe also). 
+    Use HDF5Image, which is actually just a HDF5 file. 
 """
 
+import io
 import numpy as np
 
 class NpzImage:
-    """I/O interface for NpzImage file. 
+    '''I/O interface for NpzImage file. 
     
-    NpzImage is a convenient file format to store 
-    multi-layered multi-dimensional arrays with a metadata header. 
-    Multiple ``numpy.ndarray`` objects with the same shape can be stored 
-    as "layers", which can be specified by a "key". 
-    All layers should have identical dimension and shape, but data type may be varied. 
+    NpzImage is a convenient file format to store multi-layered multi-dimensional arrays with a metadata header. 
+    Multiple ``numpy.ndarray`` objects can be stored as "layers", which can be specified by a "key". 
 
     Args:
         fp (str or file-like): Path or file-like object of the source file. If None, an empty object is created. 
+
+    Note:
+        - Shape restriction on the layer items has been removed. Layers with different shapes can now be mixed. 
+        - Layer keys must be a string. 
+        - "h" cannot be used as a layer key. 
 
     Examples:
         Creation
@@ -34,8 +41,8 @@ class NpzImage:
 
         Adding layers
 
-        >>> im.append_layer("one", np.array( [[1.0, 2.0], [3.0, 4.0]] ) )
-        >>> im.append_layer("two", np.array( [[5.0, 6.0], [7.0, 8.0]] ) )
+        >>> im.layers["one"] = np.array( [[1.0, 2.0], [3.0, 4.0]] )
+        >>> im.layers["two"] = np.array( [[5.0, 6.0], [7.0, 8.0]] )
         
         Save to a file
 
@@ -54,63 +61,42 @@ class NpzImage:
         [7. 8.]]
         >>> print(im2.h["string"])
         wow
-    """
+    '''
     
-    def __init__(self, fp=None):
-        """Initializer
-        """
+    def __init__(self, fp: str|io.FileIO|io.BytesIO|None=None) -> None:
         
-        h = {}
-        layers = {}
+        self.h: dict = {"history": []}
+        self.layers: dict[str,np.ndarray] = {}
         
         if fp:
-            with np.load(fp, allow_pickle=True) as z:
-                for key, arr in z.items():
-                    if key == "h":
-                        h = arr
-                    else:
-                        layers[key] = arr
-            
-            h = h[()]
-        else:
-            h = {}
-            layers = {}
-                
-        self.h = {k: v for k, v in h.items()}
-        self.layers = layers
+            self.fromfile(fp)
 
-    #-----#
-    # Get #
-    #-----#
-    def get_layer(self, key):
-        return self.layers[key]
-    
-    #---------#
-    # Editing #
-    #---------#
-    def append_layer(self, key, arr):
-        if self.layers:
-            for l in self.layers.values():
-                if len(l.shape) == len(arr.shape): # check dimensionality
-                    for size1, size2 in zip(l.shape, arr.shape):
-                        if size1 != size2:         # check size in each dimension
-                            raise ValueError("Cannot append data with different shape. ")
+
+    def fromfile(self, fp: str|io.FileIO|io.BytesIO) -> None:
+        with np.load(fp, allow_pickle=True) as z:
+            for key, arr in z.items():
+                if key == "h":
+                    self.h = {k: v for k, v in arr[()].items()}
                 else:
-                    raise ValueError("Cannot append data with different dimension. ")
-        
+                    self.layers[key] = arr
+
+    def get_layer(self, key: str) -> np.ndarray:
+        return self.layers[key]
+
+    def append_layer(self, key: str, arr: np.ndarray) -> None:
         self.layers[key] = arr
     
-    def pop_layer(self, key):
+    def pop_layer(self, key: str) -> np.ndarray:
         return self.layers.pop(key)
     
-    def save(self, fp, compress=False):
-        h = {k: v for k, v in self.h.items()}
+    def save(self, fp: str|io.FileIO|io.BytesIO, compress: bool=False) -> None:
+        h: dict = {k: v for k, v in self.h.items()}
         if compress:
             np.savez_compressed(fp, h=h, **self.layers)
         else:
             np.savez(fp, h=h, **self.layers)
 
-    def append_history(self, string):
+    def append_history(self, string: str) -> None:
         try:
             self.h["history"].append(string)
         except KeyError:

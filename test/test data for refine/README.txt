@@ -1,1 +1,0 @@
-Data taken from 20211027_PF_BL6A/r2_500mm_tensile

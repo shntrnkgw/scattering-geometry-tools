@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sgt &#8212; sgt 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/nature.css?v=279e0f84" />
+    <script src="../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">sgt 1.0.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">sgt</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sgt</h1><div class="highlight"><pre>
+<span></span><span class="c1"># coding=&quot;utf-8&quot;</span>
+<span class="sd">&quot;&quot;&quot;Higher-level interface for manipulation of scattering geometry. </span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sgt</span><span class="w"> </span><span class="kn">import</span> <span class="n">core</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+
+<span class="c1"># for easy access</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sgt.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axis</span>
+
+<span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;1.0.0&quot;</span>
+
+<div class="viewcode-block" id="PlanarRectangularDetector">
+<a class="viewcode-back" href="../sgt.html#sgt.PlanarRectangularDetector">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PlanarRectangularDetector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates coordinates for a planar rectangular detector. </span>
+
+<span class="sd">    This class is designed to be immutable. </span>
+<span class="sd">    All calculations are done upon instantiation </span>
+<span class="sd">    based on the parameters given to the initializer. </span>
+<span class="sd">    If any of the parameters need to be modified, </span>
+<span class="sd">    create a new instance. </span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        u: Horizontal (u) coordinates of each pixel in the detector coordinate system</span>
+<span class="sd">        v: Vertical (v) coordinates of each pixel in the detector coordinate system</span>
+<span class="sd">        eu: Basis vector along the u axis in the lab coordinate system</span>
+<span class="sd">        ev: Basis vector along the v axis in the lab coordinate system</span>
+<span class="sd">        en: Basis vector along the n axis in the lab coordinate system</span>
+<span class="sd">        x: x coordinates of each pixel in the lab coordinate system</span>
+<span class="sd">        y: y coordinates of each pixel in the lab coordinate system</span>
+<span class="sd">        z: z coordinates of each pixel in the lab coordinate system</span>
+<span class="sd">        xyz_center: Coordinate of the detector center point in the lab coordinate system</span>
+<span class="sd">        shortest_distance: The shortest distance from the sample to the detector plane</span>
+<span class="sd">        pixel_solid_angle_coverage_correction_factors: correction factors for each pixel accounting for pixel solid angle coverage</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">px_numbers</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span><span class="nb">int</span><span class="p">],</span> 
+                       <span class="n">px_sizes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span><span class="nb">float</span><span class="p">],</span> 
+                       <span class="n">center_offset</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span><span class="nb">float</span><span class="p">],</span> 
+                       <span class="n">rotation_matrix</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                       <span class="n">sample_to_detector_distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializer</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            px_numbers: Numbers of pixels along the horizontal and vertical axes (hor, ver)</span>
+<span class="sd">            px_sizes: Size of a single pixel along the horizontal and vertical axes (hor, ver)</span>
+<span class="sd">            center_coord: (x, y) coordinate of the image center, </span>
+<span class="sd">                measured from the center of a pixel at index `[0,0]`</span>
+<span class="sd">            rotation_matrix: Rotation matrix that defines the orientation of the detector</span>
+<span class="sd">            sample_to_detector_distance: Sample to detector distance</span>
+<span class="sd">        </span>
+<span class="sd">        Note:</span>
+<span class="sd">            `px_sizes`, `center_coord`, and `sample_to_detector_distance` </span>
+<span class="sd">            should be of the same unit (typically mm). </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">px_numbers</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">px_numbers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">px_sizes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">px_sizes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center_offset</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">center_offset</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rotation_matrix</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">rotation_matrix</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_to_detector_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">sample_to_detector_distance</span><span class="p">)</span>
+
+        <span class="c1"># Pixel coordinates in the detector system (2D)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">u</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">v</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">u</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">v</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_coords_in_detector_system</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">px_numbers</span><span class="p">,</span> 
+                                                             <span class="bp">self</span><span class="o">.</span><span class="n">px_sizes</span><span class="p">,</span> 
+                                                             <span class="bp">self</span><span class="o">.</span><span class="n">center_offset</span><span class="p">)</span>
+
+        <span class="c1"># Detector basis vectors in the lab system</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eu</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ev</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">en</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">en</span> <span class="o">=</span> \
+            <span class="n">core</span><span class="o">.</span><span class="n">make_detector_basis_vectors_in_lab_system</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rotation_matrix</span><span class="p">)</span>
+        
+        <span class="c1"># Pixel coordinates in the lab system</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">=</span> \
+            <span class="n">core</span><span class="o">.</span><span class="n">transform_detector_to_lab</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">u</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">v</span><span class="p">,</span> 
+                                           <span class="bp">self</span><span class="o">.</span><span class="n">eu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_to_detector_distance</span><span class="p">)</span>
+        
+        <span class="c1"># Center coordinate in the lab system</span>
+        <span class="n">xc</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="n">yc</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="n">zc</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="n">xc</span><span class="p">,</span> <span class="n">yc</span><span class="p">,</span> <span class="n">zc</span> <span class="o">=</span> \
+            <span class="n">core</span><span class="o">.</span><span class="n">transform_detector_to_lab</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]),</span> 
+                                           <span class="bp">self</span><span class="o">.</span><span class="n">eu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_to_detector_distance</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xyz_center</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">xc</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">yc</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">zc</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+
+        <span class="c1"># Shortest distance from the sample to the detector plane</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shortest_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> \
+            <span class="n">core</span><span class="o">.</span><span class="n">calc_shortest_distance_to_detector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">en</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_to_detector_distance</span><span class="p">)</span>
+
+        <span class="c1"># Pixel solid angle coverage correction factors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel_solid_angle_coverage_correction_factors</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> \
+            <span class="n">core</span><span class="o">.</span><span class="n">make_solid_angle_coverage_correction_factors</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shortest_distance</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReciprocalGeometry">
+<a class="viewcode-back" href="../sgt.html#sgt.ReciprocalGeometry">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReciprocalGeometry</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates q vector. </span>
+<span class="sd">    </span>
+<span class="sd">    This class is designed to be immutable. </span>
+<span class="sd">    All calculations are done upon instantiation </span>
+<span class="sd">    based on the parameters given to the initializer. </span>
+<span class="sd">    If any of the parameters need to be modified, </span>
+<span class="sd">    create a new instance. </span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        qx: x component of the scattering vector q</span>
+<span class="sd">        qy: y component of the scattering vector q</span>
+<span class="sd">        qz: z component of the scattering vector q</span>
+<span class="sd">        qabs: absolute value of the scattering vector q</span>
+<span class="sd">        azimuthal_angle_rad: Azimuthal angle in radians (= atan(qy/qx))</span>
+<span class="sd">        wavelength: wavelength of the incident beam</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                       <span class="n">y</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                       <span class="n">z</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                       <span class="n">wavelength</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializer</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x: x coordinates of each pixel in the lab coordinate system</span>
+<span class="sd">            y: y coordinates of each pixel in the lab coordinate system</span>
+<span class="sd">            z: z coordinates of each pixel in the lab coordinate system</span>
+<span class="sd">            wavelength: wavelength of the incident beam</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+    
+        <span class="bp">self</span><span class="o">.</span><span class="n">qx</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">qy</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">qz</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wavelength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">wavelength</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">qx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">qy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">qz</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_q_vector</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">wavelength</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">qabs</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_qabs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">qx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">qy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">qz</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">azimuthal_angle_rad</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_azimuthal_angle_rad</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">qx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">qy</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="PixelSorter">
+<a class="viewcode-back" href="../sgt.html#sgt.PixelSorter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PixelSorter</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Circular averager</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        bin_edges: Edges of each bin </span>
+<span class="sd">        binning_coords: Coordinates (positions) used for binning</span>
+<span class="sd">        masked_pixels: Truth array or index array that specifies the pixels to mask</span>
+<span class="sd">        bin_midpoints: Midpoints of bin edges</span>
+<span class="sd">        indices_in_bin: Binning index array</span>
+<span class="sd">        bin_counts: Pixel counts in each bin</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bin_edges</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                       <span class="n">binning_coords</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                       <span class="n">masked_pixels</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="nb">any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializer</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            bin_edges: Edges of each bin. Must be sorted in an ascending order. </span>
+<span class="sd">            binning_coords: Coordinates (positions) used for binning (usually qabs)</span>
+<span class="sd">            masked_pixels: Truth array or index array that specifies the pixels to mask</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_edges</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">bin_edges</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">binning_coords</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">binning_coords</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">masked_pixels</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="nb">any</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">masked_pixels</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_midpoints</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">bin_edges</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">bin_edges</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span><span class="o">/</span><span class="mf">2.0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">indices_in_bin</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">indices_in_bin</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_bin_indices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bin_edges</span><span class="p">,</span> 
+                                                                     <span class="bp">self</span><span class="o">.</span><span class="n">binning_coords</span><span class="p">,</span> 
+                                                                     <span class="bp">self</span><span class="o">.</span><span class="n">masked_pixels</span><span class="p">)</span>
+        
+<div class="viewcode-block" id="PixelSorter.bin">
+<a class="viewcode-back" href="../sgt.html#sgt.PixelSorter.bin">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">intensities</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                  <span class="n">errors</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> 
+                                                        <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Bin intensity &amp; error using binning indices</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            intensities: Intensity array</span>
+<span class="sd">            errors: Errors of intensity. Can be zero-filled array in case the error output is not necessary</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Binned arrays of intensity and error</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="k">return</span> <span class="n">core</span><span class="o">.</span><span class="n">binning</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">indices_in_bin</span><span class="p">,</span> 
+                            <span class="bp">self</span><span class="o">.</span><span class="n">bin_counts</span><span class="p">,</span> 
+                            <span class="n">intensities</span><span class="p">,</span> 
+                            <span class="n">errors</span><span class="p">)</span></div>
+</div>
+
+
+<span class="n">REQUIRED_KEYS_GEOMETRY</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;type&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;width_px&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;height_px&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;px_width_mm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;px_height_mm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;u0_mm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;v0_mm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;L0_mm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;lam_ang&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;version&quot;</span>
+<span class="p">]</span>
+<span class="n">ROTATION_TYPE_EULER_XYX</span> <span class="o">=</span> <span class="s2">&quot;euler_xyx&quot;</span>
+<span class="n">ROTATION_TYPE_AROUND_AXES</span> <span class="o">=</span> <span class="s2">&quot;around_axes&quot;</span>
+
+<div class="viewcode-block" id="load_geometry_from_dict">
+<a class="viewcode-back" href="../sgt.html#sgt.load_geometry_from_dict">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_geometry_from_dict</span><span class="p">(</span><span class="n">d</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">PlanarRectangularDetector</span><span class="p">,</span><span class="n">ReciprocalGeometry</span><span class="p">]:</span>
+
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">REQUIRED_KEYS_GEOMETRY</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    
+    <span class="k">assert</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;1.0.0&quot;</span>
+
+    <span class="k">assert</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;PlanarRectangularDetector&quot;</span>
+
+    <span class="c1"># make rotation matrix</span>
+    <span class="n">R</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+    <span class="k">if</span> <span class="s2">&quot;rotation&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;rotation&quot;</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">ROTATION_TYPE_EULER_XYX</span><span class="p">:</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_rotation_matrix_euler_xyx</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;rotation&quot;</span><span class="p">][</span><span class="s2">&quot;alpha_deg&quot;</span><span class="p">],</span> 
+                                                <span class="n">d</span><span class="p">[</span><span class="s2">&quot;rotation&quot;</span><span class="p">][</span><span class="s2">&quot;beta_deg&quot;</span><span class="p">],</span> 
+                                                <span class="n">d</span><span class="p">[</span><span class="s2">&quot;rotation&quot;</span><span class="p">][</span><span class="s2">&quot;gamma_deg&quot;</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;rotation&quot;</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">ROTATION_TYPE_AROUND_AXES</span><span class="p">:</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">:</span> <span class="n">Axis</span>
+        <span class="c1"># rotation matrix formed from multiple rotations</span>
+        <span class="k">for</span> <span class="n">rotspec</span> <span class="ow">in</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;rotation&quot;</span><span class="p">][</span><span class="s2">&quot;rotations&quot;</span><span class="p">]:</span>
+            <span class="k">match</span> <span class="n">rotspec</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]:</span>
+                <span class="k">case</span> <span class="s2">&quot;X&quot;</span><span class="p">:</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">Axis</span><span class="o">.</span><span class="n">X</span>
+                <span class="k">case</span> <span class="s2">&quot;Y&quot;</span><span class="p">:</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">Axis</span><span class="o">.</span><span class="n">Y</span>
+                <span class="k">case</span> <span class="s2">&quot;Z&quot;</span><span class="p">:</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">Axis</span><span class="o">.</span><span class="n">Z</span>
+            <span class="n">Radd</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">=</span> <span class="n">core</span><span class="o">.</span><span class="n">make_rotation_matrix_around_lab_axis</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">rotspec</span><span class="p">[</span><span class="s2">&quot;angle_deg&quot;</span><span class="p">])</span>
+            <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">Radd</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
+
+    <span class="c1"># detector</span>
+    <span class="n">det</span> <span class="o">=</span> <span class="n">PlanarRectangularDetector</span><span class="p">((</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;width_px&quot;</span><span class="p">],</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;height_px&quot;</span><span class="p">]),</span> 
+                                    <span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;px_width_mm&quot;</span><span class="p">],</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;px_height_mm&quot;</span><span class="p">]),</span>
+                                    <span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="s2">&quot;u0_mm&quot;</span><span class="p">],</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;v0_mm&quot;</span><span class="p">]),</span>
+                                    <span class="n">R</span><span class="p">,</span> 
+                                    <span class="n">d</span><span class="p">[</span><span class="s2">&quot;L0_mm&quot;</span><span class="p">])</span>
+    
+    <span class="c1"># scattering geometry</span>
+    <span class="n">sc</span> <span class="o">=</span> <span class="n">ReciprocalGeometry</span><span class="p">(</span><span class="n">det</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">det</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">det</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;lam_ang&quot;</span><span class="p">])</span>
+
+    <span class="k">return</span>  <span class="n">det</span><span class="p">,</span> <span class="n">sc</span></div>
+
+
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sgt.legacy_geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">geometry</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">sgt 1.0.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">sgt</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+    &#169; Copyright 2022, Shintaro NAKAGAWA.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    </div>
+  </body>
+</html>

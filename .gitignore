@@ -130,5 +130,7 @@ dmypy.json
 
 .DS_Store
 _test/
-test_local/
+local_*
+deprecated/
 test/*.png
+validation/

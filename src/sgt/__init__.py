@@ -1,310 +1,258 @@
 # coding="utf-8"
 """Higher-level interface for manipulation of scattering geometry. 
-
 """
 
-from typing import List, IO, Tuple
 import numpy as np
 import json
-from sgt import core, _cpolarize
+from sgt import core
+from numpy.typing import NDArray
+import io
+import copy
 
-__version__ = "0.1.4"
+# for easy access
+from sgt.core import Axis
 
-class geometry:
-    """Interface class for scattering geometry manipulation. 
+__version__ = "1.0.0"
 
-    Example:
-        To create a `geometry` instance, 
-        
-            >>> import sgt
-            >>> g = sgt.geometry()
-        
-        Although all necessary parameters may be supplied 
-        as the args of the initializer, 
-        the easiest way is to load the specs from a file. 
+class PlanarRectangularDetector:
+    """Calculates coordinates for a planar rectangular detector. 
 
-            >>> g.load_specs("Geometry_AgBh.txt")
+    This class is designed to be immutable. 
+    All calculations are done upon instantiation 
+    based on the parameters given to the initializer. 
+    If any of the parameters need to be modified, 
+    create a new instance. 
 
-        Make sure to call refresh functions 
-        when you make changes to the geometry. 
-        
-            >>> g.refresh_q()
-        
-        Mask can be supplied later. 
-        For example, suppose that we already have the mask array
-        `maskarray`, 
-        
-            >>> g.mask = maskarray
-
-        Make sure to refresh polar maps whenever you made
-        any changes to the geometry. 
-            
-            >>> g.refresh_polar_map()
-
-        Finally, it can perform circular averaging. 
-        Suppose that we have the 2D intensity array `i`
-        and associated error array `e_i`, 
-
-            >>> i_av, e_i_av = g.circular_average(i, e_i)
-        
-        The output arrays are also 2D. 
-        For example, ``i_av[k]`` is the q-profile at ``k`` th 
-        azimuthal section. 
-        The arrays along the q and azimuthal angle axes 
-        are stored as ``g.ax_q`` and ``g.ax_azi``, 
-        respectively. 
+    Attributes:
+        u: Horizontal (u) coordinates of each pixel in the detector coordinate system
+        v: Vertical (v) coordinates of each pixel in the detector coordinate system
+        eu: Basis vector along the u axis in the lab coordinate system
+        ev: Basis vector along the v axis in the lab coordinate system
+        en: Basis vector along the n axis in the lab coordinate system
+        x: x coordinates of each pixel in the lab coordinate system
+        y: y coordinates of each pixel in the lab coordinate system
+        z: z coordinates of each pixel in the lab coordinate system
+        xyz_center: Coordinate of the detector center point in the lab coordinate system
+        shortest_distance: The shortest distance from the sample to the detector plane
+        pixel_solid_angle_coverage_correction_factors: correction factors for each pixel accounting for pixel solid angle coverage
     """
 
-    minimal_spec_keys: Tuple = \
-        ("width_px", 
-         "height_px", 
-         "px_width_mm", 
-         "px_height_mm", 
-         "u0_mm", 
-         "v0_mm",   
-         "alpha_deg", 
-         "beta_deg", 
-         "gamma_deg", 
-         "L0_mm", 
-         "lam_ang", 
-         "qmin_anginv", 
-         "qmax_anginv", 
-         "q_number", 
-         "azi_number")
-
-    def __init__(self, 
-    width_px: int=1, height_px: int=1, 
-    px_width_mm: float=1.0, px_height_mm: float=1.0, 
-    u0_mm: float=0.0, v0_mm: float=0.0, 
-    alpha_deg: float=0.0, beta_deg: float=0.0, gamma_deg: float=0.0, 
-    L0_mm: float=1.0, lam_ang: float=1.0, 
-    qmin: float=0.0, qmax: float=1.0, N_q: int=100, N_azi: int=1, 
-    mask: np.ndarray|None=None) -> None:
-
-        self.specs: dict = {}
-
-        self.specs["width_px"]     = width_px
-        self.specs["height_px"]    = height_px
-        self.specs["px_width_mm"]  = px_width_mm
-        self.specs["px_height_mm"] = px_height_mm
-        self.specs["u0_mm"]        = u0_mm
-        self.specs["v0_mm"]        = v0_mm 
-        self.specs["alpha_deg"]    = alpha_deg 
-        self.specs["beta_deg"]     = beta_deg 
-        self.specs["gamma_deg"]    = gamma_deg 
-        self.specs["L0_mm"]        = L0_mm 
-        self.specs["lam_ang"]      = lam_ang
-        self.specs["qmin_anginv"]  = qmin
-        self.specs["qmax_anginv"]  = qmax
-        self.specs["q_number"]     = N_q
-        self.specs["azi_number"]   = N_azi 
-
-        if mask is None:
-            self.mask = core.make_default_mask(width_px, height_px)
-        else:
-            self.mask = mask
-
-        # vars to be calculated
-        self._R: np.ndarray = np.zeros((3,3))
-        self._u: np.ndarray = np.empty((0,0))
-        self._v: np.ndarray = np.empty((0,0))
-        self._a: np.ndarray = np.zeros((3,))
-        self._b: np.ndarray = np.zeros((3,))
-        self._n: np.ndarray = np.zeros((3,))
-        self._x: np.ndarray = np.empty((0,0))
-        self._y: np.ndarray = np.empty((0,0))
-        self._z: np.ndarray = np.empty((0,0))
-        self._qx: np.ndarray = np.empty((0,0))
-        self._qy: np.ndarray = np.empty((0,0))
-        self._qz: np.ndarray = np.empty((0,0))
-        self._solid_angle_factor: np.ndarray = np.empty((0,0))
-        self._map_q:   np.ndarray = np.empty((0,0), dtype=int)
-        self._map_azi: np.ndarray = np.empty((0,0), dtype=int)
-        self._density: np.ndarray = np.empty((0,0), dtype=int)
-        self._ax_q:    np.ndarray = np.empty((0,0))
-        self._ax_azi:  np.ndarray = np.empty((0,0))
-        self._normal_incidence_dist: float = 0.0
-
-    def load_specs(self, fp: str|IO) -> None:
-        """Loads and applies parameters from a file
-        
-        It loads parameters from a geometry specification file, 
-        which is a JSON-formatted text file. 
-        The file must contain all keys listed in ``minimal_spec_keys``. 
+    def __init__(self, px_numbers: tuple[int,int], 
+                       px_sizes: tuple[float,float], 
+                       center_offset: tuple[float,float], 
+                       rotation_matrix: NDArray[np.float64], 
+                       sample_to_detector_distance: float) -> None:
+        """Initializer
 
         Args:
-            fp: file-like or path to a JSON-formatted file. 
-        """
-
-        h: dict = {}
-        missing_keys: List[str] = []
-
-        if isinstance(fp, str):
-            with open(fp, "r") as f:
-                lines = f.readlines()
-        else:
-            lines = fp.readlines()
-        
-        # for backward compatibility
-        # older geometry file contains # at every line head
-        if lines[0].startswith("#"):
-            jsonfeed = "".join([l.lstrip("#") for l in lines])
-        else:
-            jsonfeed = "".join(lines)
-
-        h = json.loads(jsonfeed)
-
-        missing_keys = [k for k in self.minimal_spec_keys if k not in h]
-
-        if missing_keys:
-            raise ValueError("missing key(s): " + ", ".join(missing_keys))
-
-        self.specs.update(h)
-    
-    def save_specs(self, fp: str|IO) -> None:
-        h: dict = {k: v for k, v in self.specs.items()}
-        h["version"] = __version__
-
-        hstr: str = json.dumps(h, indent=4, ensure_ascii=False)
-
-        if isinstance(fp, str):
-            with open(fp, "w") as f:
-                f.write(hstr)
-        else:
-            fp.write(hstr)
-
-    def refresh_q(self) -> None:
-        """
+            px_numbers: Numbers of pixels along the horizontal and vertical axes (hor, ver)
+            px_sizes: Size of a single pixel along the horizontal and vertical axes (hor, ver)
+            center_coord: (x, y) coordinate of the image center, 
+                measured from the center of a pixel at index `[0,0]`
+            rotation_matrix: Rotation matrix that defines the orientation of the detector
+            sample_to_detector_distance: Sample to detector distance
         
         Note:
-            ``self.mask`` is not used in this method. 
-        """
-        self._R = core.make_rotation_matrix(
-            self.specs["alpha_deg"], 
-            self.specs["beta_deg"], 
-            self.specs["gamma_deg"])
-
-        self._u, self._v = core.make_pixel_coords_in_detector_system(
-            self.specs["width_px"], self.specs["height_px"], 
-            self.specs["px_width_mm"], self.specs["px_height_mm"], 
-            self.specs["u0_mm"], self.specs["v0_mm"]
-            )
-
-        self._a, self._b, self._n = core.make_basis_vectors_on_detector_in_lab_system(self._R)
-
-        self._x, self._y, self._z = core.make_pixel_coords_in_lab_system(
-            self._u, self._v, 
-            self._a, self._b, self._n, self.specs["L0_mm"]
-            )
-
-        self._normal_incidence_dist = core.calc_shortest_dist_to_detector(
-            self._a, self._b, self._n, self.specs["L0_mm"]
-            )
-
-        self._solid_angle_factor = \
-            core.make_solid_angle_coverage_correction_factors(
-                self._x, self._y, self._z, self._normal_incidence_dist
-            )
-
-        self._qx, self._qy, self._qz = core.make_q(
-            self._x, self._y, self._z, self.specs["lam_ang"]
-            )
-
-    def refresh_polar_map(self) -> None:
+            `px_sizes`, `center_coord`, and `sample_to_detector_distance` 
+            should be of the same unit (typically mm). 
         """
         
-        Note: 
-            This method uses ``self.mask``. 
-        """
+        self.px_numbers: tuple[int, int] = copy.deepcopy(px_numbers)
+        self.px_sizes: tuple[float, float] = copy.deepcopy(px_sizes)
+        self.center_offset: tuple[float, float] = copy.deepcopy(center_offset)
+        self.rotation_matrix: NDArray[np.float64] = np.copy(rotation_matrix)
+        self.sample_to_detector_distance: float = copy.copy(sample_to_detector_distance)
 
-        assert self._is_ready_for_polar_map() # check
+        # Pixel coordinates in the detector system (2D)
+        self.u: NDArray[np.float64]
+        self.v: NDArray[np.float64]
+        self.u, self.v = core.make_coords_in_detector_system(self.px_numbers, 
+                                                             self.px_sizes, 
+                                                             self.center_offset)
 
-        self._map_q, self._map_azi, self._density, self._ax_q, self._ax_azi = \
-            _cpolarize.calc_polar_map(
-                self._qx, self._qy, self._qz, 
-                self.mask, 
-                self.specs["qmin_anginv"], self.specs["qmax_anginv"], 
-                self.specs["q_number"], self.specs["azi_number"]
-            )
+        # Detector basis vectors in the lab system
+        self.eu: NDArray[np.float64]
+        self.ev: NDArray[np.float64]
+        self.en: NDArray[np.float64]
+        self.eu, self.ev, self.en = \
+            core.make_detector_basis_vectors_in_lab_system(self.rotation_matrix)
+        
+        # Pixel coordinates in the lab system
+        self.x: NDArray[np.float64]
+        self.y: NDArray[np.float64]
+        self.z: NDArray[np.float64]
+        self.x, self.y, self.z = \
+            core.transform_detector_to_lab(self.u, self.v, 
+                                           self.eu, self.ev, self.sample_to_detector_distance)
+        
+        # Center coordinate in the lab system
+        xc: NDArray[np.float64]
+        yc: NDArray[np.float64]
+        zc: NDArray[np.float64]
+        xc, yc, zc = \
+            core.transform_detector_to_lab(np.array([0.0]), np.array([0.0]), 
+                                           self.eu, self.ev, self.sample_to_detector_distance)
+        self.xyz_center: NDArray[np.float64] = np.array([xc[0], yc[0], zc[0]])
+
+        # Shortest distance from the sample to the detector plane
+        self.shortest_distance: float = \
+            core.calc_shortest_distance_to_detector(self.eu, self.ev, self.en, self.sample_to_detector_distance)
+
+        # Pixel solid angle coverage correction factors
+        self.pixel_solid_angle_coverage_correction_factors: NDArray[np.float64] = \
+            core.make_solid_angle_coverage_correction_factors(self.x, self.y, self.z, self.shortest_distance)
+
+class ReciprocalGeometry:
+    """Calculates q vector. 
     
-    def circular_average(self, intensity: np.ndarray, e_intensity: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Performs circular averaging. 
+    This class is designed to be immutable. 
+    All calculations are done upon instantiation 
+    based on the parameters given to the initializer. 
+    If any of the parameters need to be modified, 
+    create a new instance. 
+
+    Attributes:
+        qx: x component of the scattering vector q
+        qy: y component of the scattering vector q
+        qz: z component of the scattering vector q
+        qabs: absolute value of the scattering vector q
+        azimuthal_angle_rad: Azimuthal angle in radians (= atan(qy/qx))
+        wavelength: wavelength of the incident beam
+    """
+
+    def __init__(self, x: NDArray[np.float64], 
+                       y: NDArray[np.float64], 
+                       z: NDArray[np.float64], 
+                       wavelength: float) -> None:
+        """Initializer
 
         Args:
-            intensity: intensity array. 
-            e_intensity: intensity error array. 
+            x: x coordinates of each pixel in the lab coordinate system
+            y: y coordinates of each pixel in the lab coordinate system
+            z: z coordinates of each pixel in the lab coordinate system
+            wavelength: wavelength of the incident beam
+        """
+    
+        self.qx: NDArray[np.float64]
+        self.qy: NDArray[np.float64]
+        self.qz: NDArray[np.float64]
+        self.wavelength: float = copy.copy(wavelength)
+
+        self.qx, self.qy, self.qz = core.make_q_vector(x, y, z, wavelength)
+        self.qabs: NDArray[np.float64] = core.make_qabs(self.qx, self.qy, self.qz)
+        self.azimuthal_angle_rad: NDArray[np.float64] = core.make_azimuthal_angle_rad(self.qx, self.qy)
+
+class PixelSorter:
+    """Circular averager
+    
+    Attributes:
+        bin_edges: Edges of each bin 
+        binning_coords: Coordinates (positions) used for binning
+        masked_pixels: Truth array or index array that specifies the pixels to mask
+        bin_midpoints: Midpoints of bin edges
+        indices_in_bin: Binning index array
+        bin_counts: Pixel counts in each bin
+    """
+
+    def __init__(self, bin_edges: NDArray[np.float64], 
+                       binning_coords: NDArray[np.float64], 
+                       masked_pixels: NDArray[any]) -> None:
+        """Initializer
+
+        Args:
+            bin_edges: Edges of each bin. Must be sorted in an ascending order. 
+            binning_coords: Coordinates (positions) used for binning (usually qabs)
+            masked_pixels: Truth array or index array that specifies the pixels to mask
+        """
+        
+        self.bin_edges: NDArray[np.float64] = np.copy(bin_edges)
+        self.binning_coords: NDArray[np.float64] = np.copy(binning_coords)
+        self.masked_pixels: NDArray[any] = np.copy(masked_pixels)
+
+        self.bin_midpoints: NDArray[np.float64] = (bin_edges[:-1] + bin_edges[1:])/2.0
+
+        self.indices_in_bin: NDArray[np.intp]
+        self.bin_counts: NDArray[np.intp]
+        self.indices_in_bin, self.bin_counts = core.make_bin_indices(self.bin_edges, 
+                                                                     self.binning_coords, 
+                                                                     self.masked_pixels)
+        
+    def bin(self, intensities: NDArray[np.float64], 
+                  errors: NDArray[np.float64]) -> tuple[NDArray[np.float64], 
+                                                        NDArray[np.float64]]:
+        """Bin intensity & error using binning indices
+
+        Args:
+            intensities: Intensity array
+            errors: Errors of intensity. Can be zero-filled array in case the error output is not necessary
         
         Returns:
-            Two 2D numpy arrays of the intensity and the error, 
-            both with the shape (``azi_number``, ``q_number``). 
+            Binned arrays of intensity and error
         """
+        
+        return core.binning(self.indices_in_bin, 
+                            self.bin_counts, 
+                            intensities, 
+                            errors)
 
-        return _cpolarize.circular_average(
-            intensity.astype(np.float64), 
-            e_intensity.astype(np.float64), 
-            self._map_q, self._map_azi, self._density
-            )
+REQUIRED_KEYS_GEOMETRY = [
+    "type",
+    "width_px",
+    "height_px",
+    "px_width_mm",
+    "px_height_mm",
+    "u0_mm",
+    "v0_mm",
+    "L0_mm",
+    "lam_ang",
+    "version"
+]
+ROTATION_TYPE_EULER_XYX = "euler_xyx"
+ROTATION_TYPE_AROUND_AXES = "around_axes"
+
+def load_geometry_from_dict(d: dict) -> tuple[PlanarRectangularDetector,ReciprocalGeometry]:
+
+    for k in REQUIRED_KEYS_GEOMETRY:
+        assert k in d.keys()
     
-    def _is_ready_for_polar_map(self) -> bool:
+    assert d["version"] == "1.0.0"
 
-        shape: Tuple[int, int] = (self.specs["height_px"], self.specs["width_px"])
-        
-        # check mask size
-        if self.mask.shape != shape:
-            return False
-        
-        return True
+    assert d["type"] == "PlanarRectangularDetector"
 
-    def get_qabs(self) -> np.ndarray: 
-        return np.sqrt(self.qx*self.qx + self.qy*self.qy + self.qz*self.qz)
+    # make rotation matrix
+    R: NDArray[np.float64]
+    if "rotation" not in d.keys():
+        R = np.eye(3, dtype=np.float64)
+    elif d["rotation"]["type"] == ROTATION_TYPE_EULER_XYX:
+        R = core.make_rotation_matrix_euler_xyx(d["rotation"]["alpha_deg"], 
+                                                d["rotation"]["beta_deg"], 
+                                                d["rotation"]["gamma_deg"])
+    elif d["rotation"]["type"] == ROTATION_TYPE_AROUND_AXES:
+        R = np.eye(3, dtype=np.float64)
+        ax: Axis
+        # rotation matrix formed from multiple rotations
+        for rotspec in d["rotation"]["rotations"]:
+            match rotspec["axis"]:
+                case "X": ax = Axis.X
+                case "Y": ax = Axis.Y
+                case "Z": ax = Axis.Z
+            Radd: NDArray[np.float64] = core.make_rotation_matrix_around_lab_axis(ax, rotspec["angle_deg"])
+            R = np.matmul(Radd, R)
 
-    @property
-    def R(self) -> np.ndarray: return self._R
+    # detector
+    det = PlanarRectangularDetector((d["width_px"], d["height_px"]), 
+                                    (d["px_width_mm"], d["px_height_mm"]),
+                                    (d["u0_mm"], d["v0_mm"]),
+                                    R, 
+                                    d["L0_mm"])
+    
+    # scattering geometry
+    sc = ReciprocalGeometry(det.x, det.y, det.z, d["lam_ang"])
 
-    @property
-    def u(self) -> np.ndarray: return self._u
+    return  det, sc
 
-    @property
-    def v(self) -> np.ndarray: return self._v
 
-    @property
-    def x(self) -> np.ndarray: return self._x
-
-    @property
-    def y(self) -> np.ndarray: return self._y
-
-    @property
-    def z(self) -> np.ndarray: return self._z
-
-    @property
-    def qx(self) -> np.ndarray: return self._qx
-
-    @property
-    def qy(self) -> np.ndarray: return self._qy
-
-    @property
-    def qz(self) -> np.ndarray: return self._qz
-
-    @property
-    def solid_angle_factor(self) -> np.ndarray: return self._solid_angle_factor
-
-    @property
-    def map_q(self) -> np.ndarray: return self._map_q
-
-    @property
-    def map_azi(self) -> np.ndarray: return self._map_azi
-
-    @property
-    def density(self) -> np.ndarray: return self._density
-
-    @property
-    def ax_q(self) -> np.ndarray: return self._ax_q
-
-    @property
-    def ax_azi(self) -> np.ndarray: return self._ax_azi
-
-    @property
-    def normal_incidence_dist(self) -> float: return self._normal_incidence_dist
+from sgt.legacy_geometry import geometry
 
 if __name__ == "__main__":
     pass

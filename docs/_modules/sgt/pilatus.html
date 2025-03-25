@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sgt.pilatus &#8212; sgt 1.0.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/nature.css?v=279e0f84" />
+    <script src="../../_static/documentation_options.js?v=8d563738"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">sgt 1.0.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+          <li class="nav-item nav-item-2"><a href="../sgt.html" accesskey="U">sgt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">sgt.pilatus</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for sgt.pilatus</h1><div class="highlight"><pre>
+<span></span><span class="c1"># coding=utf-8</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Created on 2017/11/17</span>
+
+<span class="sd">@author: snakagawa</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">struct</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">IO</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_splitnull</span><span class="p">(</span><span class="n">c_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts null terminated string to a string. </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">buf</span> <span class="o">=</span> <span class="n">c_string</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\0</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">buf</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">DTYPES</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> 
+                <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span> 
+                <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;H&quot;</span><span class="p">,</span> 
+                <span class="mi">4</span><span class="p">:</span> <span class="s2">&quot;L&quot;</span><span class="p">,</span> 
+                <span class="mi">6</span><span class="p">:</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> 
+                <span class="mi">7</span><span class="p">:</span> <span class="s2">&quot;c&quot;</span><span class="p">,</span> 
+                <span class="mi">8</span><span class="p">:</span> <span class="s2">&quot;h&quot;</span><span class="p">,</span> 
+                <span class="mi">9</span><span class="p">:</span> <span class="s2">&quot;l&quot;</span><span class="p">,</span> 
+                <span class="mi">11</span><span class="p">:</span> <span class="s2">&quot;f&quot;</span><span class="p">,</span> 
+                <span class="mi">12</span><span class="p">:</span> <span class="s2">&quot;d&quot;</span><span class="p">}</span>
+
+<div class="viewcode-block" id="ReadTiff">
+<a class="viewcode-back" href="../../sgt.pilatus.html#sgt.pilatus.ReadTiff">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ReadTiff</span><span class="p">(</span><span class="n">fp</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="n">IO</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Reads a .tif file from PILATUS detector and returns the 2-d data as a numpy array. </span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fp: file-like or path to the file. </span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        A 2D array of the int type. </span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; arr = pilatus.ReadTiff(&quot;AgBh.tif&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; print(arr.shape, arr.dtype)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">f</span><span class="p">:</span> <span class="n">IO</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">close</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">byteorder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">ifd_offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">entry_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">tag_dict</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">entry_number</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="n">tag_code</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">dtype_code</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">data_str</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">data_offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">c_offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="n">dtype</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">numer</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">denom</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">data</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+    <span class="n">dformat</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">dlength</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+
+    <span class="n">ImageWidth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">ImageHeight</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">BitsPerSample</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">Compression</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">PhotometricInterpretation</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">StripOffsets</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">RowsPerStrip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">StripBytesCounts</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">XResolution</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">YResolution</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">NewSubfileType</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">DateTime</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span>
+
+    <span class="n">BitsPerSampleSingle</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">ImageDataOffset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">ImageBytesCount</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1">#------#</span>
+    <span class="c1"># Open #</span>
+    <span class="c1">#------#</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fp</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fp</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span>
+        <span class="n">close</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">fp</span>
+        <span class="n">close</span> <span class="o">=</span> <span class="kc">False</span>
+    
+    <span class="c1"># f.seek(0)</span>
+    
+    <span class="c1">#--------#</span>
+    <span class="c1"># Header #</span>
+    <span class="c1">#--------#</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">byteorder</span> <span class="o">=</span> <span class="p">{</span><span class="sa">b</span><span class="s1">&#39;II&#39;</span><span class="p">:</span> <span class="s1">&#39;&lt;&#39;</span><span class="p">,</span> <span class="sa">b</span><span class="s1">&#39;MM&#39;</span><span class="p">:</span> <span class="s1">&#39;&gt;&#39;</span><span class="p">}[</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">2</span><span class="p">)]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;not a valid TIFF file&quot;</span><span class="p">)</span>
+    
+    <span class="n">version</span><span class="p">,</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;H&quot;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">version</span> <span class="o">!=</span> <span class="mi">42</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;not a valid TIFF file&quot;</span><span class="p">)</span>
+    
+    <span class="n">ifd_offset</span><span class="p">,</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;l&quot;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span>
+    
+    <span class="c1">#-----#</span>
+    <span class="c1"># IFD #</span>
+    <span class="c1">#-----#</span>
+    
+    <span class="c1">### SEEK</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">ifd_offset</span><span class="p">)</span>
+    <span class="c1"># number of entries</span>
+    <span class="n">entry_count</span><span class="p">,</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;H&quot;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+    <span class="n">tag_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">entry_number</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">entry_count</span><span class="p">):</span>
+        
+        <span class="n">tag_code</span><span class="p">,</span> <span class="n">dtype_code</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">data_str</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;HHl4s&quot;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">12</span><span class="p">))</span>
+        <span class="c1"># special data types (RATIONAL and SRATIONAL)</span>
+        <span class="k">if</span> <span class="n">dtype_code</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="ow">and</span> <span class="n">count</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">data_offset</span><span class="p">,</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;L&quot;</span><span class="p">,</span> <span class="n">data_str</span><span class="p">)</span>
+            <span class="c1">### POP</span>
+            <span class="n">c_offset</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">data_offset</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dtype_code</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="s2">&quot;R&quot;</span>
+                <span class="n">numer</span><span class="p">,</span> <span class="n">denom</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;LL&quot;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">8</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="s2">&quot;S&quot;</span>
+                <span class="n">numer</span><span class="p">,</span> <span class="n">denom</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;lL&quot;</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">8</span><span class="p">))</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">numer</span><span class="p">)</span><span class="o">/</span><span class="n">denom</span>    
+            <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">c_offset</span><span class="p">)</span>
+            <span class="c1">### PUSH</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="n">DTYPES</span><span class="p">[</span><span class="n">dtype_code</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Contains unknown or unsupported data type&quot;</span><span class="p">)</span>
+            
+            <span class="n">dformat</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{0}{1}{2}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">byteorder</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
+            <span class="n">dlength</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">calcsize</span><span class="p">(</span><span class="n">dformat</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dlength</span> <span class="o">&lt;=</span> <span class="mi">4</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">dformat</span><span class="p">,</span> <span class="n">data_str</span><span class="p">[:</span><span class="n">dlength</span><span class="p">])</span>
+                <span class="n">data_offset</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data_offset</span><span class="p">,</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">byteorder</span><span class="o">+</span><span class="s2">&quot;L&quot;</span><span class="p">,</span> <span class="n">data_str</span><span class="p">)</span>
+                <span class="c1">### POP</span>
+                <span class="n">c_offset</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">data_offset</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="n">dformat</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">dlength</span><span class="p">))</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">c_offset</span><span class="p">)</span>
+                <span class="c1">### PUSH</span>
+                <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="nb">str</span><span class="p">:</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="n">_splitnull</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        
+        <span class="c1">#print tag_code, dtype, count, data</span>
+        
+        <span class="n">tag_dict</span><span class="p">[</span><span class="n">tag_code</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+        
+    <span class="c1">#------------#</span>
+    <span class="c1"># Check tags #</span>
+    <span class="c1">#------------#</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">ImageWidth</span>    <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">256</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">ImageHeight</span>   <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">257</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">BitsPerSample</span> <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">258</span><span class="p">]</span>
+        <span class="n">Compression</span>   <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">259</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">PhotometricInterpretation</span> <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">262</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">StripOffsets</span>  <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">273</span><span class="p">]</span>
+        <span class="n">RowsPerStrip</span>  <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">278</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">StripBytesCounts</span> <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">279</span><span class="p">]</span>
+        <span class="n">XResolution</span>   <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">282</span><span class="p">]</span>
+        <span class="n">YResolution</span>   <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">283</span><span class="p">]</span>
+        
+        <span class="n">NewSubfileType</span> <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">254</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1">#ImageDescription = tag_dict[270][0]</span>
+        <span class="c1">#Model         = tag_dict[272][0]</span>
+        <span class="c1">#Software      = tag_dict[305]</span>
+        <span class="n">DateTime</span>      <span class="o">=</span> <span class="n">tag_dict</span><span class="p">[</span><span class="mi">306</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1">#Artist        = tag_dict[315]</span>
+        
+        <span class="c1"># print(&quot;ImageWidth&quot;, ImageWidth, type(ImageWidth))</span>
+        <span class="c1"># print(&quot;ImageHeight&quot;, ImageHeight, type(ImageHeight))</span>
+        <span class="c1"># print(&quot;BitsPerSample&quot;, BitsPerSample, type(BitsPerSample))</span>
+        <span class="c1"># print(&quot;Compression&quot;, Compression, type(Compression))</span>
+        <span class="c1"># print(&quot;PhotometricInterpretation&quot;, PhotometricInterpretation, type(PhotometricInterpretation))</span>
+        <span class="c1"># print(&quot;StripOffsets&quot;, StripOffsets, type(StripOffsets))</span>
+        <span class="c1"># print(&quot;RowsPerStrip&quot;, RowsPerStrip, type(RowsPerStrip))</span>
+        <span class="c1"># print(&quot;StripBytesCounts&quot;, StripBytesCounts, type(StripBytesCounts))</span>
+        <span class="c1"># print(&quot;XResolution&quot;, XResolution, type(XResolution))</span>
+        <span class="c1"># print(&quot;YResolution&quot;, YResolution, type(YResolution))</span>
+        <span class="c1"># print(&quot;NewSubfileType&quot;, NewSubfileType, type(NewSubfileType))</span>
+        <span class="c1"># print(&quot;DateTime&quot;, DateTime, type(DateTime))</span>
+
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Missing tag(s)&quot;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">BitsPerSample</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Unsupported tiff (color): BitsPerSample=&quot;</span> <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">BitsPerSample</span><span class="p">]))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">BitsPerSampleSingle</span> <span class="o">=</span> <span class="n">BitsPerSample</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="k">if</span> <span class="n">Compression</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Unsupported tiff (compressed)&quot;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">PhotometricInterpretation</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Unsupported tiff (wrong photometric interpretation)&quot;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">StripOffsets</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Unsupported tiff (multiple strips)&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">ImageDataOffset</span> <span class="o">=</span> <span class="n">StripOffsets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="n">ImageBytesCount</span> <span class="o">=</span> <span class="n">StripBytesCounts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="k">if</span> <span class="n">NewSubfileType</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Unsupported tiff (multipage or mask)&quot;</span><span class="p">)</span>
+        
+    <span class="c1">#-----------#</span>
+    <span class="c1"># Load data #</span>
+    <span class="c1">#-----------#</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">ImageDataOffset</span><span class="p">)</span>
+    <span class="n">PixelNumber</span> <span class="o">=</span> <span class="n">ImageWidth</span> <span class="o">*</span> <span class="n">ImageHeight</span>
+    <span class="k">if</span> <span class="n">BitsPerSampleSingle</span> <span class="o">==</span> <span class="mi">32</span><span class="p">:</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromfile</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">PixelNumber</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">flat</span><span class="p">,</span> <span class="p">(</span><span class="n">ImageHeight</span><span class="p">,</span> <span class="n">ImageWidth</span><span class="p">),</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;C&quot;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">close</span><span class="p">:</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    
+    <span class="k">return</span> <span class="n">image</span></div>
+
+
+<span class="c1"># def LoadPilatusTiff(fp, key_dest=&quot;intensity&quot;):</span>
+<span class="c1">#     im = ReadGrayTiff(fp)</span>
+<span class="c1">#     wim = snpl.image.NpzImage()</span>
+<span class="c1">#     wim.append_layer(key_dest, im)</span>
+<span class="c1">#     return wim</span>
+<span class="c1"># </span>
+<span class="c1"># def get_mask_NpzImage(fp, empty=False):</span>
+<span class="c1">#     im = ReadGrayTiff(fp)</span>
+<span class="c1">#     wim = snpl.image.NpzImage()</span>
+<span class="c1">#     mask = np.zeros_like(im, dtype=np.uint8)</span>
+<span class="c1">#     if not empty:</span>
+<span class="c1">#         mask[np.where(im&lt;0)] = 1</span>
+<span class="c1">#     wim.append_layer(&quot;mask&quot;, mask)</span>
+<span class="c1">#     return wim</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">im</span> <span class="o">=</span> <span class="n">ReadTiff</span><span class="p">(</span><span class="s2">&quot;../test/scatter/AgBh.tif&quot;</span><span class="p">)</span>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">sgt 1.0.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li>
+          <li class="nav-item nav-item-2"><a href="../sgt.html" >sgt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">sgt.pilatus</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+    &#169; Copyright 2022, Shintaro NAKAGAWA.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    </div>
+  </body>
+</html>
